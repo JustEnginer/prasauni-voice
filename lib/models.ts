@@ -6,7 +6,10 @@ export const kindLabels:Record<string,string>={blog:"लेख · Blog",photo:"�
 export const ADMIN_EMAIL="help.justengineer@gmail.com";
 const LEGACY_ADMIN_EMAILS=["help.justenginer@gmail.com"];
 export function adminEmails(): string[] {
- const configured = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+ const env = typeof globalThis !== "undefined" && typeof (globalThis as { process?: { env?: Record<string, string | undefined> } }).process !== "undefined"
+   ? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+   : {};
+ const configured = (env.ADMIN_EMAILS || env.ADMIN_EMAIL || "").split(",").map((v: string) => v.trim().toLowerCase()).filter(Boolean);
  return Array.from(new Set([ADMIN_EMAIL, ...LEGACY_ADMIN_EMAILS, ...configured].map(v => v.toLowerCase())));
 }
 export function isAdminEmail(email?:string | null){
