@@ -4,4 +4,12 @@ export type Comment={id:string;post_id:string;name:string;body:string;status:str
 export const categories=["समुदाय","स्थानीय सरकार","शिक्षा","कृषि","संस्कृति","खेलकुद","सूचना"];
 export const kindLabels:Record<string,string>={blog:"लेख · Blog",photo:"तस्बिर · Photo",video:"भिडियो · Video",facebook:"Facebook",tiktok:"TikTok"};
 export const ADMIN_EMAIL="help.justenginer@gmail.com";
+export function adminEmails(): string[] {
+ const configured = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+ return Array.from(new Set([ADMIN_EMAIL, ...configured].map(v => v.toLowerCase())));
+}
+export function isAdminEmail(email?:string | null){
+ const normalized=(email||"").trim().toLowerCase();
+ return adminEmails().includes(normalized);
+}
 export function dateLabel(n:number){return new Date(n).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",timeZone:"Asia/Kathmandu"})}

@@ -2,16 +2,25 @@ import { socialPlatform } from "./media";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { authClient, authConfigured, dataClient } from "./supabase/server";
-import { ADMIN_EMAIL, type Member } from "./models";
+import { isAdminEmail, type Member } from "./models";
 export const db=dataClient;
 export function checked<T>(result:{data:T,error:unknown}):T {if(result.error)throw result.error;return result.data}
 export class ApiError extends Error {constructor(public status:number,message:string){super(message)}}
+export async function ensureMemberProfile(user: {id:string; email?:string | null; user_metadata?: Record<string, any> | null; name?:string | null} | null) {
+ if(!user||!user.id) return;
+ const email=(user.email||"").trim();
+ const name=(user.user_metadata?.full_name || user.user_metadata?.name || user.name || email.split("@")[0] || "Community member").trim() || "Community member";
+ const now=Date.now();
+ checked(await db().from("members").upsert({id:user.id,name,created_at:now},{onConflict:"id"}));
+ return {id:user.id,name,email,admin:isAdminEmail(email)} as Member;
+}
 export const member=cache(async():Promise<Member|null>=>{
  if(!authConfigured())return null;
  const client=await authClient();const {data:{user},error}=await client.auth.getUser();
- if(error||!user||!user.email_confirmed_at)return null;
+ if(error||!user||!user.email)return null;
  const email=user.email||"";
- return {id:user.id,name:user.user_metadata?.full_name||user.user_metadata?.name||"Community member",email,admin:email.toLowerCase()===ADMIN_EMAIL};
+ const profile=await ensureMemberProfile(user);
+ return profile ?? {id:user.id,name:user.user_metadata?.full_name||user.user_metadata?.name||email.split("@")[0]||"Community member",email,admin:isAdminEmail(email)};
 });
 export async function signedIn(admin=false){const u=await member();if(!u)throw new ApiError(401,"कृपया Login गर्नुहोस्। Please sign in.");if(admin&&!u.admin)throw new ApiError(403,"यो पृष्ठ admin का लागि मात्र हो। Admin access only.");return u}
 export async function visitorId(){return (await cookies()).get("pv_visitor")?.value||""}
