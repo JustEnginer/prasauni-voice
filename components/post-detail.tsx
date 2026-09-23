@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback,useEffect,useState} from "react";
-import {ArrowLeft,ArrowUpRight,Heart,Eye,MessageCircle,Send,Share2} from "lucide-react";
+import {ArrowLeft,ArrowUpRight,Heart,Eye,MessageCircle,Send,Share2} from "@/lib/icons";
 import MediaPlayer from "./media-player";
 import SiteShell,{api,useSession} from "./site-shell";
 import {Button} from "@/components/ui/button";

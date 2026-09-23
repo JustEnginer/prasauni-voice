@@ -2,7 +2,7 @@
 
 import {usePathname} from "next/navigation";
 import {createContext,useContext,useEffect,useState,type ReactNode} from "react";
-import {ArrowUpRight,MapPin,Menu,X,LogOut,UserRound} from "lucide-react";
+import {ArrowUpRight,MapPin,Menu,X,LogOut,UserRound} from "@/lib/icons";
 import type {Member} from "@/lib/models";
 import {Button} from "@/components/ui/button";
 type Session={user:Member|null;ready:boolean;error:string;retry:()=>void};

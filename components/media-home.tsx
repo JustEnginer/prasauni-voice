@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect,useState} from "react";
-import {ArrowRight,ArrowUpRight,Eye,Heart,MessageCircle,Play,Newspaper,Camera,Video,MapPin} from "lucide-react";
+import {ArrowRight,ArrowUpRight,Eye,Heart,MessageCircle,Play,Newspaper,Camera,Video,MapPin} from "@/lib/icons";
 import MediaPlayer from "./media-player";
 import SiteShell,{api,useSession} from "./site-shell";
 import {Button} from "@/components/ui/button";

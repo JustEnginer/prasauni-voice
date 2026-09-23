@@ -2,7 +2,7 @@ import { member } from "@/lib/server";
 import { authConfigured } from "@/lib/supabase/server";
 import { safeReturnTo } from "@/lib/auth-utils";
 
-import {ArrowLeft,ArrowUpRight,ShieldCheck} from "lucide-react";
+import {ArrowLeft,ArrowUpRight,ShieldCheck} from "@/lib/icons";
 export const dynamic="force-dynamic";
 export const metadata={title:"Login · सदस्य बन्नुहोस्"};
 async function SignIn({returnTo}:{returnTo:string}){const u=await member();return u?<><p>You are signed in as {u.email}.</p><a href={returnTo} className="btn">Continue to Prasauni Voice <ArrowUpRight size={18}/></a><form action="/auth/signout" method="post"><button className="text-link">Sign out / Switch account</button></form></>:<><a href={"/auth/google?next="+encodeURIComponent(returnTo)} className="btn login-button">Continue with Google <ArrowUpRight size={18}/></a><p className="login-note">आफ्नो Google account बाट सुरक्षित Login गर्नुहोस्।<br/>No separate website password is needed.</p>{!authConfigured()&&<p role="status" className="error-box">Google sign-in setup is pending. Please try again after the site is connected.</p>}</>}

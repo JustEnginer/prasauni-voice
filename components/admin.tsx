@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
 
-import {ArrowUpRight,BarChart3,Eye,Heart,MessageCircle,Plus,Upload,Users,FileText,Trash2,Pencil,Check,Image as ImageIcon} from "lucide-react";
+import {ArrowUpRight,BarChart3,Eye,Heart,MessageCircle,Plus,Upload,Users,FileText,Trash2,Pencil,Check,ImageIcon} from "@/lib/icons";
 import SiteShell,{api,useSession} from "./site-shell";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
