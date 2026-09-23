@@ -1,0 +1,101 @@
+// Exercise production API and access-control code against an isolated SQLite database.
+// Identity and runtime bindings are replaced only in temporary test modules.
+import {testDatabase} from './support/database.mjs';
+import {mkdtemp,readFile,writeFile,rm,readdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+const temp=await mkdtemp(join(tmpdir(),'pv-api-test-'));
+const {pg:database,client:binding}=await testDatabase();
+let identity=null,cookie='';
+try{
+const shim=join(temp,'shim.mjs');await writeFile(shim,`export let cookies; export let dataClient; export let authClient; export function authConfigured(){return true} export function cache(f){return f} export function setup(db,user,c){dataClient=()=>db;authClient=async()=>({auth:{getUser:async()=>({data:{user:await user()},error:null})}});cookies=c}`);
+const shimModule=await import(pathToFileURL(shim));shimModule.setup(binding,async()=>identity?{id:identity.userId,email:identity.email,email_confirmed_at:identity.unverified?null:'2026-01-01',user_metadata:{full_name:identity.fullName}}:null,async()=>({get:()=>cookie?{value:cookie}:undefined}));
+async function compile(source,name,replacements){let text=await readFile(source,'utf8');for(const [a,b] of Object.entries(replacements))text=text.replaceAll(a,b);const output=ts.transpileModule(text,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;await writeFile(join(temp,name),output)}
+await compile('lib/media.ts','media.mjs',{});
+await compile('lib/models.ts','models.mjs',{});
+await compile('lib/demo.ts','demo.mjs',{});
+await compile('lib/auth-utils.ts','auth-utils.mjs',{});
+await compile('lib/server.ts','server.mjs',{'"./media"':'"./media.mjs"','"next/headers"':'"./shim.mjs"','"./supabase/server"':'"./shim.mjs"','"react"':'"./shim.mjs"','"./models"':'"./models.mjs"'});
+await compile('app/api/[...path]/route.ts','route.mjs',{'"@/lib/server"':'"./server.mjs"','"@/lib/models"':'"./models.mjs"','"@/lib/demo"':'"./demo.mjs"'});
+const route=await import(pathToFileURL(join(temp,'route.mjs')));
+let passed=0;async function request(path,method='GET',data,expected=200,origin='https://test.local'){const req=new Request('https://test.local/api/'+path,{method,headers:{origin,'content-type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});const response=await route[method](req,{params:Promise.resolve({path:path.split('?')[0].split('/')})});const body=await response.json();assert.equal(response.status,expected,path+': '+JSON.stringify(body));passed++;return {response,body}}
+await request('metrics','GET',undefined,401);
+await request('posts','GET',undefined,401);
+const session=await request('session','POST');cookie=session.response.headers.get('set-cookie').match(/pv_visitor=([^;]+)/)[1];
+assert.ok(session.body.previewUntil>Date.now());await request('posts');
+await request('posts','POST',{},401);
+identity={userId:'reader-a',email:'reader@example.com',fullName:'Test Reader'};
+await request('metrics','GET',undefined,403);await request('posts','POST',{},403);
+await request('session','POST');
+identity={userId:'admin-a',email:'help.justenginer@gmail.com',fullName:'Test Admin'};
+await request('session','POST');
+const draft={title:'Test story',excerpt:'Test only',body:'Hello\n\nCommunity',kind:'blog',category:'समुदाय',status:'draft',source_url:'',media_url:''};
+await request('posts','POST',draft,403,'https://evil.example');
+const created=await request('posts','POST',draft,201);const id=created.body.id;
+identity={userId:'reader-a',email:'reader@example.com',fullName:'Test Reader'};
+assert.equal((await request('posts')).body.posts.length,0);await request('posts/'+id,'GET',undefined,404);await request('posts/'+id,'DELETE',undefined,403);
+identity={userId:'admin-a',email:'help.justenginer@gmail.com',fullName:'Test Admin'};
+await request('posts/'+id,'PUT',{...draft,status:'published'});
+await request('posts','POST',{...draft,kind:'facebook',source_url:'https://evil.example/posts/1'},400);
+await request('posts','POST',{...draft,kind:'tiktok',source_url:'https://www.tiktok.com/@account'},400);
+identity={userId:'reader-a',email:'reader@example.com',fullName:'Test Reader'};
+await request('posts/'+id+'/like','PUT',{liked:true});await request('posts/'+id+'/like','PUT',{liked:true});
+assert.equal((await request('posts/'+id)).body.post.likes,1);
+await request('posts/'+id+'/view','POST');await request('posts/'+id+'/view','POST');assert.equal((await request('posts/'+id)).body.post.views,1);
+const comment=(await request('posts/'+id+'/comment','POST',{body:'A respectful comment'},201)).body.comment;
+assert.equal((await request('posts/'+id)).body.comments.length,1);await request('comments/'+comment.id,'PUT',{status:'hidden'},403);
+identity={userId:'admin-a',email:'help.justenginer@gmail.com',fullName:'Test Admin'};
+await request('comments/'+comment.id,'PUT',{status:'hidden'});assert.equal((await request('posts/'+id)).body.comments.length,0);
+await request('comments/'+comment.id,'PUT',{status:'visible'});
+const metrics=(await request('metrics')).body;assert.equal(metrics.totals.likes,1);assert.equal(metrics.totals.views,1);assert.equal(metrics.totals.comments,1);assert.equal(metrics.totals.posts,1);
+await request('posts/'+id,'DELETE');assert.equal(Number((await database.query('SELECT COUNT(*) n FROM likes')).rows[0].n),0);assert.equal(Number((await database.query('SELECT COUNT(*) n FROM comments')).rows[0].n),0);
+identity=null;await database.query('UPDATE visitors SET preview_until=0 WHERE id=$1',[cookie]);await request('posts','GET',undefined,401);
+const expiredSession=await request('session','POST');assert.ok(expiredSession.body.previewUntil<Date.now(),'Checking the session must not silently restart the preview');
+const restart=await route.POST(new Request('https://test.local/api/preview',{method:'POST',headers:{origin:'https://test.local'}}),{params:Promise.resolve({path:['preview']})});assert.equal(restart.status,303);assert.equal(restart.headers.get('location'),'/');assert.ok((await database.query('SELECT preview_until FROM visitors WHERE id=$1',[cookie])).rows[0].preview_until>Date.now());passed++;
+await request('posts');await request('preview','POST',undefined,403,'https://evil.example');
+// Demo records, gallery/video filtering, admin restrictions, uploads and rate limits.
+identity={userId:'reader-a',email:'reader@example.com',fullName:'Reader'};
+await request('demo','POST',undefined,403);await request('upload','POST',{type:'image/jpeg',size:100},403);
+identity={userId:'admin-a',email:'help.justenginer@gmail.com',fullName:'Admin',unverified:true};
+await request('metrics','GET',undefined,401);
+identity={userId:'admin-a',email:'help.justenginer@gmail.com',fullName:'Admin'};
+await request('demo','POST');await request('demo','POST');
+assert.equal((await request('posts')).body.posts.length,3);
+assert.equal((await request('posts?mode=gallery')).body.posts[0].id,'demo-photo');
+assert.equal((await request('posts?mode=videos')).body.posts[0].id,'demo-video');
+assert.equal((await request('posts?mode=blog')).body.posts[0].id,'demo-blog');
+await request('upload','POST',{type:'text/html',size:100},400);
+await request('upload','POST',{type:'video/mp4',size:21*1024*1024},400);
+const upload=await request('upload','POST',{type:'video/mp4',size:1000},201);assert.ok(upload.body.signedUrl);assert.match(upload.body.url,/^\/api\/media\//);
+identity={userId:'reader-a',email:'reader@example.com',fullName:'Reader'};
+for(let i=0;i<20;i++)await request('posts/demo-photo/comment','POST',{body:'Test '+i},201);
+await request('posts/demo-photo/comment','POST',{body:'Too many'},429);
+await request('posts/demo-photo/like','PUT',{liked:true});await request('posts/demo-photo/like','PUT',{liked:false});assert.equal((await request('posts/demo-photo')).body.post.likes,0);
+await request('posts/demo-photo/comment','POST',{body:'x'},400);
+const {safeReturnTo}=await import(pathToFileURL(join(temp,'auth-utils.mjs')));
+for(const bad of ['https://evil.example','//evil.example','/\\evil.example','/\nmalicious'])assert.equal(safeReturnTo(bad),'/');assert.equal(safeReturnTo('/admin'),'/admin');
+// Links and uploads share Videos/Gallery; no remote downloads or HTML injection.
+identity={userId:'admin-a',email:'help.justenginer@gmail.com',fullName:'Admin'};
+const videoLink={...draft,title:'Linked video',status:'published',kind:'video',source_url:'https://www.tiktok.com/@prasaunivoice/video/123456789',media_url:''};
+const linked=(await request('posts','POST',videoLink,201)).body.id;
+assert.ok((await request('posts?mode=videos')).body.posts.some(p=>p.id===linked));
+const photoLink={...videoLink,title:'Linked photo',kind:'photo',source_url:'https://www.facebook.com/photo/?fbid=123'};
+const photo=(await request('posts','POST',photoLink,201)).body.id;
+assert.ok((await request('posts?mode=gallery')).body.posts.some(p=>p.id===photo));
+await request('posts','POST',{...photoLink,source_url:'https://www.tiktok.com/@prasaunivoice/photo/123456789'},201);
+await request('posts','POST',{...photoLink,source_url:videoLink.source_url},400);
+await request('posts','POST',{...videoLink,source_url:'https://evil.example/video/123'},400);
+await request('posts','POST',{...videoLink,source_url:'javascript:alert(1)'},400);
+const {embedUrl}=await import(pathToFileURL(join(temp,'media.mjs')));
+assert.match(embedUrl(videoLink.source_url,true,true),/autoplay=1&muted=1/);
+assert.match(embedUrl(photoLink.source_url,false,false),/plugins\/post.php/);
+assert.match(embedUrl('https://www.facebook.com/reel/123',true,true),/plugins\/video.php/);
+assert.equal(embedUrl('https://evil.example/video/123',true,true),null);
+// Anonymous/authenticated database clients cannot bypass the server role checks.
+await database.exec('set role anon');await assert.rejects(()=>database.query('select * from posts'));await assert.rejects(()=>database.query("select public.site_metrics(0)"));await database.exec('reset role');
+await database.exec('set role authenticated');await assert.rejects(()=>database.query('delete from posts'));await database.exec('reset role');
+console.log(`${passed} API requests passed against PostgreSQL: role boundaries, verified-email admin, drafts, CSRF, preview restart, demo filters, upload signing, likes, comment throttling, metrics and deletion. Redirect and database permission checks passed. OAuth provider and storage transport are mocked; live acceptance remains required.`);
+}finally{await database.close();await rm(temp,{recursive:true,force:true})}

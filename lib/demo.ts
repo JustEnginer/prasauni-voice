@@ -1,0 +1,7 @@
+// Explicitly labelled examples, never presented as reported news.
+const common={category:'समुदाय',source_url:'',status:'published',created_at:1790121600000,updated_at:1790121600000};
+export const demoPosts=[
+ {...common,id:'demo-photo',kind:'photo',title:'नेपालको झलक · Demo photo',excerpt:'Testing gallery — तपाईंले उपलब्ध गराउनुभएको cover image।',body:'यो परीक्षणका लागि राखिएको तस्बिर हो, समाचार होइन। This image comes from the Facebook cover screenshot supplied for this project. Sign in to test likes and comments. Admin can edit or delete this demo.',media_url:'/demo/nepal-cover.jpg'},
+ {...common,id:'demo-video',kind:'video',title:'हाम्रो आवाज · Demo video',excerpt:'६ सेकेन्डको परीक्षण clip · Video playback test',body:'यो तस्बिरबाट बनाइएको ६ सेकेन्डको silent demo clip हो, वास्तविक घटनाको भिडियो होइन। Use Play, Pause, Seek and Full screen to test the video player. Admin can replace this clip with an original video.',media_url:'/demo/nepal-preview.mp4'},
+ {...common,id:'demo-blog',kind:'blog',title:'प्रसौनी Voice मा स्वागत छ · Demo blog',excerpt:'ग्यालरी, भिडियो र समुदायका कुराकानी परीक्षण गरौँ।',body:'यो एउटा demo लेख हो। यहाँ प्रकाशित सामग्री नेपाली र English दुवै भाषामा पढ्न सकिन्छ।\n\nSign in with Google to like a post and join the conversation. Readers cannot publish or change posts.\n\nAdmin: open the dashboard to create, edit, publish or remove content and moderate comments. Demo content may be removed before launch.',media_url:'/demo/nepal-cover.jpg'},
+];
