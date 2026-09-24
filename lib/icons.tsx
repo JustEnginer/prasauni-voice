@@ -61,6 +61,7 @@ export const ImageIcon = FaImage;
 export const MapPin = FaMapPin;
 export const Menu = FaBars;
 export const X = FaXmark;
+export const XIcon = FaXmark;
 export const LogOut = FaSignOutAlt;
 export const UserRound = FaUser;
 export const CheckIcon = FaCheck;
